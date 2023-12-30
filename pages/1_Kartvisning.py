@@ -162,6 +162,7 @@ class Dashboard:
                     }
                 )
             map.add_child(drawing)
+            drawing.add_to(map)
 
         def add_wms_layer_to_map(url, layer, layer_name, opacity = 0.5):
             folium.WmsTileLayer(
@@ -178,12 +179,12 @@ class Dashboard:
             
         def add_marker_cluster_to_map():
             marker_cluster = MarkerCluster(
-                name = 'Cluster',
-                control = False,  
-                overlay = True,  
+                name="1000 clustered icons",
+                overlay=False,
+                control=False, 
                 options = {
                     'disableClusteringAtZoom': 13
-                    }
+                    },
                 ).add_to(map)
             return marker_cluster
         
@@ -197,26 +198,32 @@ class Dashboard:
                 icon_color = "orange"
                 tooltip_text = "Solceller"
             elif row["fjernvarme"]:
-                icon_color = "white"
+                icon_color = "blue"
                 tooltip_text = "Fjernvarme"
             else:
                 icon_color = "black"
-            icon = folium.Icon(color = 'black', icon_color = icon_color)
+            icon = folium.plugins.BeautifyIcon(
+                icon = "home", 
+                border_color = "transparent", 
+                text_color = icon_color, 
+                icon_shape = "circle",
+                )
             return popup_text, tooltip_text, icon
         
-        def add_building_to_marker_cluster(marker_cluster):
-            for index, row in df.iterrows():
+        def add_building_to_marker_cluster(marker_cluster, scenario_name, df):
+            new_df = df.loc[(df['scenario_navn'] == scenario_name)]
+            for index, row in new_df.iterrows():
                 popup_text, tooltip_text, icon = styling_function(row) 
                 folium.Marker(
                     [row['y'], row['x']], 
-                    popup = popup_text, 
+                    #popup = popup_text, 
                     tooltip = tooltip_text, 
-                    icon = icon
+                    icon = icon,
                     ).add_to(marker_cluster)
             
         def add_controls_to_map():
             Fullscreen().add_to(map)
-            folium.LayerControl(position = "bottomleft").add_to(map)
+            folium.LayerControl(position = "bottomleft").add_to(map)    
 
         def display_map():
             st_map = st_folium(
@@ -228,7 +235,7 @@ class Dashboard:
             return st_map
         
         def filter_gdf(st_map):
-            if st_map["last_active_drawing"] == None:
+            if st_map["last_active_drawing"] == None or st_map["last_active_drawing"]["geometry"]["type"] == "Point":
                 pass
             else:
                 polygon = Polygon(st_map["last_active_drawing"]['geometry']['coordinates'][0])
@@ -236,7 +243,8 @@ class Dashboard:
                 self.filtered_gdf = gpd.sjoin(self.gdf, polygon_gdf, op = 'within')
                 self.filtered_df = pd.DataFrame(self.filtered_gdf.drop(columns='geometry'))
 
-        df = df.loc[(df['scenario_navn'] == scenario_name) & (df['bygningsomraadeid'] == self.selected_buildings_option)]
+        #df = df.loc[(df['scenario_navn'] == scenario_name) & (df['bygningsomraadeid'] == self.selected_buildings_option)]
+        df = df.loc[(df['bygningsomraadeid'] == self.selected_buildings_option)]
         map = create_map()
         add_drawing_to_map()
         add_wms_layer_to_map(
@@ -253,7 +261,7 @@ class Dashboard:
             )
         add_controls_to_map()
         marker_cluster = add_marker_cluster_to_map()
-        add_building_to_marker_cluster(marker_cluster = marker_cluster)
+        add_building_to_marker_cluster(marker_cluster = marker_cluster, scenario_name = scenario_name, df = df)
         self.st_map = display_map()
         filter_gdf(self.st_map)
   
@@ -269,7 +277,6 @@ class Dashboard:
 
     def filter_hourly_data(self, scenario_name):
         df_results = pd.DataFrame()
-        #--
         df = self.df_hourly_data[self.unique_objectids]
         df = df[df["scenario_navn"] == scenario_name]
         for id in self.unique_series_ids:
@@ -279,7 +286,6 @@ class Dashboard:
             df_results[id] = df_id.sum(axis = 1)
         return df_results
                 
-            
     def __cleanup_df(self, df):
         df = df.reset_index(drop = True)
         df = df.drop(columns = "Unnamed: 0")
@@ -682,8 +688,9 @@ class Dashboard:
             self.map(df = self.df, scenario_name = self.map_scenario_name)
             self.progress_bar.progress(66)
         with c2:
-            if self.st_map["last_active_drawing"] == None:
+            if self.st_map["last_active_drawing"] == None or self.st_map["last_active_drawing"]["geometry"]["type"] == "Point":
                 st.info('Tegn et polygon for å gjøre et utvalg av bygg.', icon="ℹ️")
+                self.progress_bar.progress(100)
                 st.stop()
             self.get_unique_series_ids()
         with c2:
