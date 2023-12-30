@@ -161,10 +161,12 @@ class Dashboard:
                 location = [center_y, center_x], 
                 zoom_start = 15, 
                 scrollWheelZoom = True, 
-                tiles = 'CartoDB positron', 
+                tiles = None, 
                 max_zoom = 22, 
                 control_scale = True
                 )
+            folium.TileLayer('CartoDB positron', name='Bakgrunnskart').add_to(map)
+            folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', name='Flyfoto', attr = "Flyfoto").add_to(map)
             return map
         
         def add_drawing_to_map():
@@ -208,21 +210,33 @@ class Dashboard:
         
         def styling_function(row):
             popup_text = ""
-            tooltip_text = row["har_adresse"]
-            if row["grunnvarme"]:
-                icon_color = "green"
-            elif row["solceller"]:
-                icon_color = "orange"
-            elif row["fjernvarme"]:
-                icon_color = "blue"
-            else:
-                icon_color = "black"
+            text = ""
+            rows = row[["grunnvarme", "fjernvarme", "solceller", "luft_luft_varmepumpe", "oppgraderes"]]
+            text = ''.join(rows.index[rows].str[0].str.upper())
+            TEXT_COLOR_MAP = {
+                "G" : "brown",
+                "F" : "blue",
+                "S" : "yellow",
+                "L" : "orange",
+                "O" : "green",
+            }
+            try:
+                text_color = TEXT_COLOR_MAP[text]
+            except Exception:
+                text_color = "black"
+
             icon = folium.plugins.BeautifyIcon(
-                icon = "home", 
-                border_color = icon_color, 
-                text_color = icon_color, 
+                #icon = "home",
+                border_width = 2, 
+                border_color = text_color, 
+                text_color = text_color,
+                #background_color = "#FFFFFF00", 
                 icon_shape = "circle",
+                number = text
                 )
+            tooltip_text = f'''
+                {row["har_adresse"]} (<strong>{row["bruksareal_totalt"]:,} m²</strong>)<br>
+                <em>{row["profet_bygningstype"]}</em>'''.replace(",", " ")
             return popup_text, tooltip_text, icon
         
         def add_building_to_marker_cluster(marker_cluster, scenario_name, df):
@@ -238,13 +252,15 @@ class Dashboard:
             
         def add_controls_to_map():
             Fullscreen().add_to(map)
-            folium.LayerControl(position = "bottomleft").add_to(map)    
+            folium.LayerControl(position = "bottomleft").add_to(map)   
+            map.options['attributionControl'] = False 
 
         def display_map():
             st_map = st_folium(
                 map,
                 use_container_width = True,
                 height = 400,
+                #height = 400,
                 returned_objects = ["last_active_drawing"]
                 )
             return st_map
@@ -341,12 +357,12 @@ class Dashboard:
         with tab1:
             #with st.expander("Dagens energi- og effektbehov"):
             with st.container():
-                st.markdown(f"<span style='color:black'><small>**{self.__rounding_to_int_fixed(np.sum(electric_array_delivered + thermal_array_delivered), -3):,}** kWh/år | **{self.__rounding_to_int_fixed(np.max(electric_array_delivered + thermal_array_delivered), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:black'><small>**{self.__rounding_to_int_fixed(np.sum(electric_array_delivered + thermal_array_delivered), -2):,}** kWh/år | **{self.__rounding_to_int_fixed(np.max(electric_array_delivered + thermal_array_delivered), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown(f"<span style='color:{thermal_color_delivered}'><small>Termisk:<br>**{self.__rounding_to_int_fixed(np.sum(thermal_array_delivered), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(thermal_array_delivered), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{thermal_color_delivered}'><small>Termisk:<br>**{self.__rounding_to_int_fixed(np.sum(thermal_array_delivered), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(thermal_array_delivered), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"<span style='color:{electricty_color_delivered}'><small>Elektrisk<br>**{self.__rounding_to_int_fixed(np.sum(electric_array_delivered), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array_delivered), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{electricty_color_delivered}'><small>Elektrisk<br>**{self.__rounding_to_int_fixed(np.sum(electric_array_delivered), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array_delivered), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             
             df_demands = pd.DataFrame(
                 {"Måneder" : ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"],
@@ -385,14 +401,14 @@ class Dashboard:
         with tab2:
             #with st.expander("Energi- og effektbehov"):
             with st.container():
-                st.markdown(f"<span style='color:black'><small>**{self.__rounding_to_int_fixed(np.sum(spaceheating_array + dhw_array + electric_array), -3):,}** kWh/år | **{self.__rounding_to_int_fixed(np.max(spaceheating_array + dhw_array + electric_array), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:black'><small>**{self.__rounding_to_int_fixed(np.sum(spaceheating_array + dhw_array + electric_array), -2):,}** kWh/år | **{self.__rounding_to_int_fixed(np.max(spaceheating_array + dhw_array + electric_array), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.markdown(f"<span style='color:{spaceheating_color}'><small>Oppvarming<br>**{self.__rounding_to_int_fixed(np.sum(spaceheating_array), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(spaceheating_array), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{spaceheating_color}'><small>Oppvarming<br>**{self.__rounding_to_int_fixed(np.sum(spaceheating_array), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(spaceheating_array), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"<span style='color:{dhw_color}'><small>Tappevann<br>**{self.__rounding_to_int_fixed(np.sum(dhw_array), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(dhw_array), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{dhw_color}'><small>Tappevann<br>**{self.__rounding_to_int_fixed(np.sum(dhw_array), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(dhw_array), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             with c3:
-                st.markdown(f"<span style='color:{electricty_color}'><small>Elspesifikt<br>**{self.__rounding_to_int_fixed(np.sum(electric_array), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{electricty_color}'><small>Elspesifikt<br>**{self.__rounding_to_int_fixed(np.sum(electric_array), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             df_demands = pd.DataFrame(
                 {"Måneder" : ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"],
                 "Romoppvarmingsbehov (kWh/år)" : self.__hour_to_month(spaceheating_array),
@@ -522,9 +538,9 @@ class Dashboard:
             #with st.expander("Dagens energi- og effektbehov"):
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown(f"<span style='color:{before_color}'><small>Før:<br>**{self.__rounding_to_int_fixed(np.sum(thermal_array_delivered + electric_array_delivered), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(thermal_array_delivered), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{before_color}'><small>Før:<br>**{self.__rounding_to_int_fixed(np.sum(thermal_array_delivered + electric_array_delivered), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(thermal_array_delivered), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"<span style='color:{after_color}'><small>Etter<br>**{self.__rounding_to_int_fixed(np.sum(grid_array), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array_delivered), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{after_color}'><small>Etter<br>**{self.__rounding_to_int_fixed(np.sum(grid_array), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(electric_array_delivered), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             
             df_demands = pd.DataFrame(
                 {"Måneder" : ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"],
@@ -562,20 +578,20 @@ class Dashboard:
             #with st.expander("Time for time"):
             varighetskurve = st.toggle("Varighetskurve", value = False, key = f"{key}_varighetskurve")
             if varighetskurve == True:
-                grid_array_sorted = np.sort(grid_array)[::-1]
-                grid_before_sorted = np.sort(thermal_array_delivered + electric_array_delivered)[::-1]
+                grid_array_sorted = np.sort(grid_array)[::0]
+                grid_before_sorted = np.sort(thermal_array_delivered + electric_array_delivered)[::0]
             else:
                 grid_array_sorted = grid_array
                 grid_before_sorted = thermal_array_delivered + electric_array_delivered
-            #spaceheating_array_sorted = np.sort(spaceheating_array)[::-1]
-            #dhw_array_sorted = np.sort(dhw_array)[::-1]
-            #electric_array_sorted = np.sort(electric_array)[::-1]
+            #spaceheating_array_sorted = np.sort(spaceheating_array)[::0]
+            #dhw_array_sorted = np.sort(dhw_array)[::0]
+            #electric_array_sorted = np.sort(electric_array)[::0]
             
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown(f"<span style='color:{grid_color}'><small>Utgangspunkt<br>**{self.__rounding_to_int_fixed(np.sum(grid_before_sorted), -3):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(grid_before_sorted), -1):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{grid_color}'><small>Utgangspunkt<br>**{self.__rounding_to_int_fixed(np.sum(grid_before_sorted), -2):,}** kWh/år<br>**{self.__rounding_to_int_fixed(np.max(grid_before_sorted), 0):,}** kW</span>".replace(",", " "), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"<span style='color:{stand_out_color}'><small>{scenario_name}<br>**{self.__rounding_to_int_fixed(np.sum(grid_array_sorted), -3):,}** kWh/år (-{100 - self.__rounding_to_int((np.sum(grid_array_sorted)/np.sum(grid_before_sorted))*100)}%)<br>**{self.__rounding_to_int_fixed(np.max(grid_array_sorted), -1):,}** kW (-{100 - self.__rounding_to_int((np.max(grid_array_sorted)/np.max(grid_before_sorted))*100)}%)</span>".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{stand_out_color}'><small>{scenario_name}<br>**{self.__rounding_to_int_fixed(np.sum(grid_array_sorted), -2):,}** kWh/år (-{100 - self.__rounding_to_int((np.sum(grid_array_sorted)/np.sum(grid_before_sorted))*100)}%)<br>**{self.__rounding_to_int_fixed(np.max(grid_array_sorted), 0):,}** kW (-{100 - self.__rounding_to_int((np.max(grid_array_sorted)/np.max(grid_before_sorted))*100)}%)</span>".replace(",", " "), unsafe_allow_html=True)
             
             #trace1 = go.Scatter(x=np.arange(len(spaceheating_array_sorted)), y=spaceheating_array_sorted, mode='lines', name='Oppvarming', visible='legendonly', line=dict(color=spaceheating_color))
             #trace2 = go.Scatter(x=np.arange(len(dhw_array_sorted)), y=dhw_array_sorted, mode='lines', name='Tappevann', visible='legendonly', line=dict(color=dhw_color))
@@ -638,9 +654,9 @@ class Dashboard:
             st.write("**Strømkostnader**")
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown(f"<span style='color:{grid_color}'><small>Utgangspunkt<br>**{self.__rounding_to_int_fixed(np.sum(reference_array), -3):,}** kr/år".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{grid_color}'><small>Utgangspunkt<br>**{self.__rounding_to_int_fixed(np.sum(reference_array), -2):,}** kr/år".replace(",", " "), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"<span style='color:{stand_out_color}'><small>{scenario_name}<br>**{self.__rounding_to_int_fixed(np.sum(scenario_array), -3):,}** kr (-{100 - self.__rounding_to_int((np.sum(scenario_array)/np.sum(reference_array))*100)}%)".replace(",", " "), unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{stand_out_color}'><small>{scenario_name}<br>**{self.__rounding_to_int_fixed(np.sum(scenario_array), -2):,}** kr (-{100 - self.__rounding_to_int((np.sum(scenario_array)/np.sum(reference_array))*100)}%)".replace(",", " "), unsafe_allow_html=True)
             st.write("**Investeringskostnader**")
             well_meter = np.sum(df_buildings["grunnvarme_meter"].to_numpy())
             number_of_wells = int(well_meter/300)

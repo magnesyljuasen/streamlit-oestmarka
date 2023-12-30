@@ -797,6 +797,6 @@ class EnergyAnalysis:
     def main(self):
         df = self.import_xlsx() # en df for alle planforslag
         temperature_array = self.__load_temperature_array()
-        #self.preprocess_profet_data(temperature_array = temperature_array) # preprocess profet data
+        self.preprocess_profet_data(temperature_array = temperature_array) # preprocess profet data
         self.preprocess_luft_luft_varmepumpe(temperature_array = temperature_array) # preprocess ashp
         self.run_simulations(df)
