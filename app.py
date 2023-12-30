@@ -20,6 +20,15 @@ from streamlit_extras.switch_page_button import switch_page
 import time
 from streamlit_extras.no_default_selectbox import selectbox
 
+def run_energyanalysis():
+    energy_analysis = EnergyAnalysis(
+        building_table = "building_table_østmarka.xlsx",
+        energy_area_id = "energiomraadeid",
+        building_area_id = "bygningsomraadeid",
+        scenario_file_name = "input/scenarier.xlsx",
+        temperature_array_file_path = "input/utetemperatur.xlsx")
+    energy_analysis.main()
+
 @st.cache_resource(show_spinner=False)
 def import_df(filename):
     df = pd.read_csv(filename, low_memory=False)
@@ -48,7 +57,7 @@ def convert_df_to_gdf(df, selected_buildings_option):
 
 class Dashboard:
     def __init__(self):
-        self.title = "Energianalyse"
+        self.title = "Energi Plan Zero"
         self.icon = "🖥️"
         self.color_sequence = [
             "#c76900", #bergvarme
@@ -100,9 +109,15 @@ class Dashboard:
         
     def adjust_input_parameters_middle(self):
         with st.sidebar:
-            st.header("Kartvisning")
-            self.map_scenario_name = self.scenario_picker(key = "kartvisning", default_label = "Velg scenario")
-            selected_buildings_option = st.selectbox("Velg bygningsmasse", options = ["Eksisterende bygningsmasse", "Planforslag (inkl. dagens bygg som skal bevares)", "Planforslag (ekskl. helsebygg)", "Planforslag og områdene rundt Østmarka"])
+            selected_buildings_option = st.selectbox(
+                "Velg bygningsmasse", 
+                options = [
+                    "Eksisterende bygningsmasse", 
+                    "Planforslag (inkl. dagens bygg som skal bevares)", 
+                    "Planforslag (ekskl. helsebygg)", 
+                    "Planforslag og områdene rundt Østmarka"
+                    ]
+                    )
             selected_buildings_option_map = {
                 "Eksisterende bygningsmasse" : "E",
                 "Planforslag (inkl. dagens bygg som skal bevares)" : "P1",
@@ -110,13 +125,16 @@ class Dashboard:
                 "Planforslag og områdene rundt Østmarka" : "P3"
             }
             self.selected_buildings_option = selected_buildings_option_map[selected_buildings_option]
-            st.markdown("---")
-            st.header("Beregninger")
+            self.map_scenario_name = self.scenario_picker(
+                key = "kartvisning", 
+                default_label = "Velg scenario"
+                )
             self.elprice = st.number_input("Velg strømpris (kr/kWh)", min_value = 0.8, step = 0.2, value = 1.0, max_value = 10.0)
             self.co2_kWh = st.number_input("Velg utslippsfaktor", min_value = 1, step = 5, value = 17, max_value = 200) / 1000000
     
     def adjust_input_parameters_before(self):
-        pass
+        with st.sidebar:
+            st.image('src/img/av-logo.png', use_column_width = "auto")
         
     def import_dataframes(self):
         folder_path = "output"
@@ -190,21 +208,18 @@ class Dashboard:
         
         def styling_function(row):
             popup_text = ""
-            tooltip_text = ""
+            tooltip_text = row["har_adresse"]
             if row["grunnvarme"]:
                 icon_color = "green"
-                tooltip_text = "Grunnvarme"
             elif row["solceller"]:
                 icon_color = "orange"
-                tooltip_text = "Solceller"
             elif row["fjernvarme"]:
                 icon_color = "blue"
-                tooltip_text = "Fjernvarme"
             else:
                 icon_color = "black"
             icon = folium.plugins.BeautifyIcon(
                 icon = "home", 
-                border_color = "transparent", 
+                border_color = icon_color, 
                 text_color = icon_color, 
                 icon_shape = "circle",
                 )
@@ -677,16 +692,16 @@ class Dashboard:
         return scenario_name
                            
     def app(self):
-        self.progress_bar = st.progress(5, text = "Laster inn...")
         self.adjust_input_parameters_before()
+        self.progress_bar = st.sidebar.progress(25)
         self.import_dataframes()
-        self.progress_bar.progress(33)
+        self.progress_bar.progress(50)
         self.adjust_input_parameters_middle()
         self.df_to_gdf(df = self.df)
         c1, c2 = st.columns([1, 1])
         with c1:
             self.map(df = self.df, scenario_name = self.map_scenario_name)
-            self.progress_bar.progress(66)
+            self.progress_bar.progress(75)
         with c2:
             if self.st_map["last_active_drawing"] == None or self.st_map["last_active_drawing"]["geometry"]["type"] == "Point":
                 st.info('Tegn et polygon for å gjøre et utvalg av bygg.', icon="ℹ️")
@@ -719,5 +734,5 @@ class Dashboard:
 if __name__ == "__main__":
     dashboard = Dashboard()
     dashboard.app()
-    if st.button("Hjem"):
-        switch_page("Hjem")
+    if st.button("Kjør energianalyse"):
+        run_energyanalysis()

@@ -204,3 +204,7 @@ def building_data(self):
             self.costs()
         with tab6:
             self.building_data()
+
+def embed_map():
+    url = "https://asplanviak.maps.arcgis.com/apps/webappviewer/index.html?id=303ea87e725b400fa655cd85353a5b03"
+    components.iframe(url, height = 600)
