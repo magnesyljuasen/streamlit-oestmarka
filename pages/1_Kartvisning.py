@@ -18,14 +18,9 @@ from folium.plugins import Fullscreen, minimap
 from energyanalysis import EnergyAnalysis
 from streamlit_extras.switch_page_button import switch_page
 import time
-
 from streamlit_extras.no_default_selectbox import selectbox
 
 @st.cache_resource(show_spinner=False)
-def import_df_caching(filename):
-    df = pd.read_csv(filename, low_memory=False)
-    return df
-
 def import_df(filename):
     df = pd.read_csv(filename, low_memory=False)
     return df
@@ -79,7 +74,6 @@ class Dashboard:
                 summed = 0
         return monthly_array
 
-
     def __hour_to_month_max(self, hourly_array):
         monthly_array = []
         maksverdi = 0
@@ -114,8 +108,8 @@ class Dashboard:
         
     def adjust_input_parameters_middle(self):
         with st.sidebar:
-            self.elprice = st.number_input("Velg strømpris (kr/kWh)", min_value = 0.8, step = 0.2, value = 1.0, max_value = 10.0)
-            self.co2_kWh = st.number_input("Velg utslippsfaktor", min_value = 1, step = 5, value = 17, max_value = 200) / 1000000
+            st.header("Kartvisning")
+            self.map_scenario_name = self.scenario_picker(key = "kartvisning", default_label = "Velg scenario")
             selected_buildings_option = st.selectbox("Velg bygningsmasse", options = ["Eksisterende bygningsmasse", "Planforslag (inkl. dagens bygg som skal bevares)", "Planforslag (ekskl. helsebygg)", "Planforslag og områdene rundt Østmarka"])
             selected_buildings_option_map = {
                 "Eksisterende bygningsmasse" : "E",
@@ -124,32 +118,34 @@ class Dashboard:
                 "Planforslag og områdene rundt Østmarka" : "P3"
             }
             self.selected_buildings_option = selected_buildings_option_map[selected_buildings_option]
-            #self.selected_buildings_option = "E"
+            st.markdown("---")
+            st.header("Beregninger")
+            self.elprice = st.number_input("Velg strømpris (kr/kWh)", min_value = 0.8, step = 0.2, value = 1.0, max_value = 10.0)
+            self.co2_kWh = st.number_input("Velg utslippsfaktor", min_value = 1, step = 5, value = 17, max_value = 200) / 1000000
     
     def adjust_input_parameters_before(self):
-        def __run_energyanalysis(scenario_file):
-            if scenario_file == "Utviklingsscenario 1":
-                selected_scenario_file = "input/scenarier.xlsx"
-            else:
-                selected_scenario_file = "input/scenarier_2.xlsx"
-            energy_analysis = EnergyAnalysis(
-                building_table = "building_table_østmarka.xlsx",
-                energy_area_id = "energiomraadeid",
-                building_area_id = "bygningsomraadeid",
-                scenario_file_name = selected_scenario_file,
-                temperature_array_file_path = "input/utetemperatur.xlsx")
-            energy_analysis.main()
+        pass
+#        def __run_energyanalysis(scenario_file):
+#            if scenario_file == "Utviklingsscenario 1":
+#                selected_scenario_file = "input/scenarier.xlsx"
+#            else:
+#                selected_scenario_file = "input/scenarier_2.xlsx"
+#            energy_analysis = EnergyAnalysis(
+#                building_table = "building_table_østmarka.xlsx",
+#                energy_area_id = "energiomraadeid",
+#                building_area_id = "bygningsomraadeid",
+#                scenario_file_name = selected_scenario_file,
+#                temperature_array_file_path = "input/utetemperatur.xlsx")
+#            energy_analysis.main()
             
-        with st.sidebar:
-            with st.expander("Simulering"):
+#            with st.expander("Simulering"):
                 #self.thermal_reduction = st.slider("Justere termisk energibehov (prosentvis reduksjon)", min_value = 0, value = 0, max_value = 100)
                 #self.electric_reduction = st.slider("Justere elektrisk energibehov (prosentvis reduksjon)", min_value = 0, value = 0, max_value = 100)
-                self.caching = st.toggle("Caching", value = True)
                 #selected_scenario_file = st.selectbox("Simulering", options = ["Utviklingsscenario 1", "Utviklingsscenario 2"])
-                selected_scenario_file = "Utviklingsscenario 1"
-                if st.button("Kjør energianalyse"):
+#                selected_scenario_file = "Utviklingsscenario 1"
+#                if st.button("Kjør energianalyse"):
                     #with st.spinner("Beregner..."):
-                    __run_energyanalysis(scenario_file = selected_scenario_file)
+ #                   __run_energyanalysis(scenario_file = selected_scenario_file)
             
     def import_dataframes(self):
         def __read_csv(folder_path = "output"):
@@ -172,16 +168,10 @@ class Dashboard:
         for i in range(0, len(csv_list)):
             filename = str(csv_list[i])
             filename_hourly_data = f"output/{scenario_name_list[i]}_timedata.csv"
-            if self.caching == True:
-                df_hourly_data = import_df_caching(filename = rf"{filename_hourly_data}")
-            else:
-                df_hourly_data = import_df(filename = rf"{filename_hourly_data}")
+            df_hourly_data = import_df(filename = rf"{filename_hourly_data}")
             df_hourly_data['scenario_navn'] = f'{scenario_name_list[i]}'
             df_hourly_list.append(df_hourly_data)
-            if self.caching == True:
-                df = import_df_caching(filename = rf"output/{filename}")
-            else:
-                df = import_df(filename = rf"output/{filename}")
+            df = import_df(filename = rf"output/{filename}")
             df['scenario_navn'] = f'{scenario_name_list[i]}'
             df_list.append(df)
         self.df = pd.concat(df_list, ignore_index=True)
@@ -205,19 +195,39 @@ class Dashboard:
             'min_long': min_long,
             'max_long': max_long
         }
-        
-    def map(self, df):
-        marker_cluster_option = st.toggle("Clustering", value = True)
-        # østmarka 63.4525759196283, 10.447553721163194
-        # stjørdal 63.4728849, 10.8886829
-        # kringsjå 59.9640811 10.7295653
-        
-        map = folium.Map(location=[63.4525759196283, 10.447553721163194], zoom_start=15, scrollWheelZoom=True, tiles='CartoDB positron', max_zoom = 22, control_scale=True)
-        df = df.loc[df['scenario_navn'] == "Referansesituasjon"]
-        df = df.loc[df['bygningsomraadeid'] == self.selected_buildings_option]
-        #--
+    
+    def __map_styling_function(self, row):
+        popup_text = ""
+        tooltip_text = ""
+        if row["grunnvarme"]:
+            icon_color = "green"
+            tooltip_text = "Grunnvarme"
+        elif row["solceller"]:
+            icon_color = "orange"
+            tooltip_text = "Solceller"
+        elif row["fjernvarme"]:
+            icon_color = "white"
+            tooltip_text = "Fjernvarme"
+        else:
+            icon_color = "black"
+        icon = folium.Icon(color = 'black', icon_color = icon_color)
+        return popup_text, tooltip_text, icon
+    
+    # østmarka 63.4525759196283, 10.447553721163194
+    # stjørdal 63.4728849, 10.8886829
+    # kringsjå 59.9640811 10.7295653
+    def map(self, df, scenario_name):
+        df = df.loc[(df['scenario_navn'] == scenario_name) & (df['bygningsomraadeid'] == self.selected_buildings_option)]
+        map = folium.Map(
+            location = [63.4525759196283, 10.447553721163194], 
+            zoom_start = 15, 
+            scrollWheelZoom = True, 
+            tiles = 'CartoDB positron', 
+            max_zoom = 22, 
+            control_scale = True,)
+        Fullscreen().add_to(map)
         draw_rectangle = folium.plugins.Draw(
-            position='topleft',
+            position='topright',
             draw_options={
                 'polyline': False,
                 #'rectangle': True,
@@ -228,53 +238,80 @@ class Dashboard:
                 }
             )
         map.add_child(draw_rectangle)
-        #if st.button("Filtrer"):
-        #    drawn_polygon = folium.GeoJson(open('drawn_polygon.geojson', 'r').read())
-        #    bounding_box = self.get_bounding_box(drawn_polygon.data)
-        #    st.write(bounding_box)
-
+        #--
+        url = "https://geo.ngu.no/mapserver/LosmasserWMS2?request=GetCapabilities&service=WMS"
+        layer = "Losmasse_flate"
+        layer_name = "Løsmasser"
+        folium.WmsTileLayer(
+             url = url,
+             layers = layer,
+             transparent = True, 
+             control = True,
+             fmt="image/png",
+             name = layer_name,
+             overlay = True,
+             show = True,
+             opacity = 0.25
+             ).add_to(map)
+        #--
+        url = "https://geo.ngu.no/mapserver/GranadaWMS5?request=GetCapabilities&service=WMS"
+        layer = "Energibronn"
+        layer_name = "Energibrønner"
+        folium.WmsTileLayer(
+             url = url,
+             layers = layer,
+             transparent = True, 
+             control = True,
+             fmt="image/png",
+             name = layer_name,
+             overlay = True,
+             show = True,
+             opacity = 0.5
+             ).add_to(map)
+        #--
+        url = "https://geo.ngu.no/geoserver/nadag/ows?request=GetCapabilities&service=WMS"
+        layer = "GBU_metode"
+        layer_name = "NADAG"
+        folium.WmsTileLayer(
+             url = url,
+             layers = layer,
+             transparent = True, 
+             control = True,
+             fmt="image/png",
+             name = layer_name,
+             overlay = True,
+             show = True,
+             opacity = 0.5
+             ).add_to(map)
+        folium.LayerControl(position = "bottomleft").add_to(map)
+#    bounding_box = self.get_bounding_box(drawn_polygon.data)
         marker_cluster = MarkerCluster(
-            name='Cluster',
-            control=False,  # Do not add this cluster layer to the layer control
-            overlay=True,   # Add this cluster layer to the map
-            options={
-                #'maxClusterRadius': 4,  # Maximum radius of the cluster in pixels
-                'disableClusteringAtZoom': 20  # Disable clustering at this zoom level and lower
+            name = 'Cluster',
+            control = False,  
+            overlay = True,  
+            options = {
+                'disableClusteringAtZoom': 13
             }).add_to(map)
-        if marker_cluster_option:
-            for index, row in df.iterrows():
-                thermal_demand = int(np.sum(row['_termisk_energibehov_sum']))
-                electric_demand = int(np.sum(row['_elektrisk_energibehov_sum']))
-                total_demand = thermal_demand + electric_demand
-                if total_demand <= 100000:
-                    icon_color = '#48a23f'
-                elif total_demand > 100000 and total_demand < 500000:
-                    icon_color = '#b7dc8f'
-                elif total_demand > 500000 and total_demand < 1000000:
-                    icon_color = '#1d3c34'
-                else:
-                    icon_color = 'black'
-                popup_text = f"Termisk: {int(np.sum(row['_termisk_energibehov_sum'])):,} kWh/år<br>Elspesifikt: {int(np.sum(row['_elektrisk_energibehov_sum'])):,} kWh/år<br>".replace(",", "")
-                tooltip_text = f"Adresse: {row['har_adresse']}"
-                icon=folium.Icon(color='black',icon_color=icon_color)
-                folium.Marker([row['y'], row['x']], popup=popup_text, tooltip = tooltip_text, icon = icon).add_to(marker_cluster)
-        else:
-            for index, row in df.iterrows():
-                thermal_demand = int(np.sum(row['_termisk_energibehov_sum']))
-                electric_demand = int(np.sum(row['_elektrisk_energibehov_sum']))
-                total_demand = thermal_demand + electric_demand
-                if total_demand <= 20000:
-                    icon_color = '#1d3c34'
-                elif total_demand > 20000 and total_demand < 40000:
-                    icon_color = '#1d3c34'
-                elif total_demand > 40000:
-                    icon_color = '#1d3c34'
-                popup_text = f"Termisk: {int(np.sum(row['_termisk_energibehov_sum'])):,} kWh/år<br>Elspesifikt: {int(np.sum(row['_elektrisk_energibehov_sum'])):,} kWh/år<br>".replace(",", "")
-                tooltip_text = f"Adresse: {row['har_adresse']}"
-                icon=folium.Icon(icon="home", color="black", icon_color=icon_color)
-                folium.Marker([row['y'], row['x']], popup=popup_text, tooltip = tooltip_text, icon = icon).add_to(map)
-        Fullscreen().add_to(map)
-        #self.st_map = 
+        for index, row in df.iterrows():
+            thermal_demand = int(np.sum(row['_termisk_energibehov_sum']))
+            electric_demand = int(np.sum(row['_elektrisk_energibehov_sum']))
+            total_demand = thermal_demand + electric_demand
+            if total_demand <= 100000:
+                icon_color = '#48a23f'
+            elif total_demand > 100000 and total_demand < 500000:
+                icon_color = '#b7dc8f'
+            elif total_demand > 500000 and total_demand < 1000000:
+                icon_color = '#1d3c34'
+            else:
+                icon_color = 'black'
+            popup_text = f"Termisk: {int(np.sum(row['_termisk_energibehov_sum'])):,} kWh/år<br>Elspesifikt: {int(np.sum(row['_elektrisk_energibehov_sum'])):,} kWh/år<br>".replace(",", "")
+            tooltip_text = f"Adresse: {row['har_adresse']}"
+            popup_text, tooltip_text, icon = self.__map_styling_function(row) 
+            folium.Marker(
+                [row['y'], row['x']], 
+                popup = popup_text, 
+                tooltip = tooltip_text, 
+                icon = icon).add_to(marker_cluster)
         self.st_map = st_folium(
             map,
             use_container_width=True,
@@ -300,6 +337,7 @@ class Dashboard:
         #--
         if self.st_map["last_active_drawing"] == None:
             st.info("Tegn polygon...")
+            self.progress_bar.progress(100)
             st.stop()
         else:
             bounding_box = self.st_map["last_active_drawing"]["geometry"]["coordinates"][0]
@@ -698,7 +736,6 @@ class Dashboard:
             with c2:
                 st.markdown(f"<span style='color:{stand_out_color}'><small>{scenario_name}<br>**{self.__rounding_to_int(np.sum(scenario_array)):,}** tonn CO2 (-{100 - self.__rounding_to_int((np.sum(scenario_array)/np.sum(reference_array))*100)}%)".replace(",", " "), unsafe_allow_html=True)
             
-        
     def display_scenario_results(self, df, key, default_option):
         if (len(df)) == 0:
             st.warning('Du er utenfor kartutsnittet', icon="⚠️")
@@ -715,9 +752,9 @@ class Dashboard:
             df = self.__cleanup_df(df = df)
             self.__show_map_results(key = key, default_option = default_option)
 
-    def scenario_picker(self, key, default_option = 0):
+    def scenario_picker(self, key, default_label = "Velg scenario", default_option = 0):
         scenario_name = st.selectbox(
-            label = "Velg scenario", 
+            label = default_label, 
             options = [item for item in self.scenario_name_list if item != "Referansesituasjon"],
             index = default_option,
             key = f"{key}_scenario"
@@ -725,44 +762,46 @@ class Dashboard:
         return scenario_name
                            
     def app(self):
-        with st.spinner("Laster inn..."):
-            self.adjust_input_parameters_before()
-            #st.info("TODO: Symbolisering på kart, muligheter for ulike valg? [som prosent 0 - 100% av maksimal verdi] 1) Høyest effekt 2) Høyest energibruk 3) Høyest oppvarming 4) Høyest elspesifikt. Også mulighet til å filterer på ulike scenarier?")
-            self.import_dataframes()
-            self.adjust_input_parameters_middle()
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                self.dataframe_to_geodataframe(df = self.df)
-                self.map(df = self.df)
-            with c2:
-                #if self.st_map["zoom"] > 24:
-                #    st.warning("Du må zoome lenger ut")
-                #else:
-                self.filter_geodataframe() # returns a pandas dataframe -> self.filtered_df
-                self.get_unique_series_ids()
-            with c2:
-                self.display_map_results(df = self.filtered_df, key = "map_results", default_option = 0)
-            #--
-            option_list = [
-                "Måned",
-                "Time for time",
-                "Om scenarioet", 
-                "ET-kurve",
-                "Utslipp", 
-                "Økonomi",
-                ]
-            self.selected_visual = st.selectbox(label = "", options = option_list, label_visibility="collapsed", key = "selectmode")
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                self.display_scenario_results(df = self.filtered_df, key = "topleft", default_option = 0)
-            with c2:
-                self.display_scenario_results(df = self.filtered_df, key = "topright", default_option = 1)
-            #c1, c2 = st.columns([1, 1])
-            #with c1:
-            #    self.display_scenario_results(df = self.filtered_df, key = "bottomleft", default_option = 2)
-            #with c2:
-            #    self.display_scenario_results(df = self.filtered_df, key = "bottomright", default_option = 3)
-                
+        self.progress_bar = st.progress(0, text = "Laster inn...")
+        self.adjust_input_parameters_before()
+        #st.info("TODO: Symbolisering på kart, muligheter for ulike valg? [som prosent 0 - 100% av maksimal verdi] 1) Høyest effekt 2) Høyest energibruk 3) Høyest oppvarming 4) Høyest elspesifikt. Også mulighet til å filterer på ulike scenarier?")
+        self.import_dataframes()
+        self.progress_bar.progress(33)
+        self.adjust_input_parameters_middle()
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            self.dataframe_to_geodataframe(df = self.df)
+            self.map(df = self.df, scenario_name = self.map_scenario_name)
+            self.progress_bar.progress(66)
+        with c2:
+            #if self.st_map["zoom"] > 24:
+            #    st.warning("Du må zoome lenger ut")
+            #else:
+            self.filter_geodataframe() # returns a pandas dataframe -> self.filtered_df
+            self.get_unique_series_ids()
+        with c2:
+            self.display_map_results(df = self.filtered_df, key = "map_results", default_option = 0)
+        #--
+        option_list = [
+            "Måned",
+            "Time for time",
+            "Om scenarioet", 
+            "ET-kurve",
+            "Utslipp", 
+            "Økonomi",
+            ]
+        self.selected_visual = st.selectbox(label = "", options = option_list, label_visibility="collapsed", key = "selectmode")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            self.display_scenario_results(df = self.filtered_df, key = "topleft", default_option = 0)
+        with c2:
+            self.display_scenario_results(df = self.filtered_df, key = "topright", default_option = 1)
+        #c1, c2 = st.columns([1, 1])
+        #with c1:
+        #    self.display_scenario_results(df = self.filtered_df, key = "bottomleft", default_option = 2)
+        #with c2:
+        #    self.display_scenario_results(df = self.filtered_df, key = "bottomright", default_option = 3)
+        self.progress_bar.progress(100)
 if __name__ == "__main__":
     dashboard = Dashboard()
     dashboard.app()
