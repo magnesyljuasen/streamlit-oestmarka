@@ -4,7 +4,7 @@ import folium
 from folium.plugins import MarkerCluster, Draw
 from streamlit_folium import st_folium
 import geopandas as gpd
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 import pyproj
 import numpy as np
 import os
@@ -27,8 +27,24 @@ def import_df(filename):
 
 @st.cache_resource(show_spinner=False)
 def import_temperature_array(filename):
-    df = pd.read_excel(filename)
+    df = pd.read_excel(filename).to_numpy().ravel()
     return df
+
+@st.cache_resource(show_spinner=False)
+def read_csv(folder_path):
+    csv_file_list, scenario_name_list = [], []
+    for filename in os.listdir(folder_path):
+        if filename.endswith("unfiltered.csv"):
+            scenario_name_list.append(filename.split(sep = "_")[0])
+            csv_file_list.append(filename)
+    return csv_file_list, scenario_name_list
+
+@st.cache_resource(show_spinner=False)
+def convert_df_to_gdf(df, selected_buildings_option):
+    geometry = [Point(lon, lat) for lon, lat in zip(df['x'], df['y'])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs = "25832")
+    gdf = gdf.loc[gdf['bygningsomraadeid'] == selected_buildings_option]
+    return gdf
 
 class Dashboard:
     def __init__(self):
@@ -50,58 +66,34 @@ class Dashboard:
 
     def __hour_to_month(self, hourly_array):
         monthly_array = []
-        summed = 0
-        for i in range(0, len(hourly_array)):
-            verdi = hourly_array[i]
-            if np.isnan(verdi):
-                verdi = 0
-            summed = verdi + summed
-            if (
-                i == 744
-                or i == 1416
-                or i == 2160
-                or i == 2880
-                or i == 3624
-                or i == 4344
-                or i == 5088
-                or i == 5832
-                or i == 6552
-                or i == 7296
-                or i == 8016
-                or i == 8759
-            ):
-                monthly_array.append(int(summed))
-                summed = 0
+        sum = 0
+        for index, value in enumerate(hourly_array):
+            if np.isnan(value):
+                value = 0
+            sum = value + sum
+            if index in [744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8759]:
+                monthly_array.append(sum)
+                sum = 0
         return monthly_array
 
     def __hour_to_month_max(self, hourly_array):
         monthly_array = []
-        maksverdi = 0
-        for i in range(0, len(hourly_array)):
-            verdi = hourly_array[i]
-            if not np.isnan(verdi):
-                if maksverdi < verdi:
-                    maksverdi = verdi
-            if (
-                i == 744
-                or i == 1416
-                or i == 2160
-                or i == 2880
-                or i == 3624
-                or i == 4344
-                or i == 5088
-                or i == 5832
-                or i == 6552
-                or i == 7296
-                or i == 8016
-                or i == 8759
-            ):
-                monthly_array.append(int(maksverdi))
-                maksverdi = 0
+        max_value = 0
+        for index, value in enumerate(hourly_array):
+            if not np.isnan(value):
+                if max_value < value:
+                    max_value = value
+            if index in [744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8759]:
+                monthly_array.append(max_value)
+                max_value = 0
         return monthly_array
     
     def set_streamlit_settings(self):
-        st.set_page_config(page_title=self.title, page_icon=self.icon, layout="wide",)
+        st.set_page_config(
+            page_title = self.title, 
+            page_icon = self.icon, 
+            layout="wide"
+            )
         with open("src/styles/main.css") as f:
             st.markdown("<style>{}</style>".format(f.read()), unsafe_allow_html=True)
         st.markdown("""<style>[data-testid="collapsedControl"] svg {height: 3rem;width: 3rem;}</style>""", unsafe_allow_html=True)
@@ -125,232 +117,149 @@ class Dashboard:
     
     def adjust_input_parameters_before(self):
         pass
-#        def __run_energyanalysis(scenario_file):
-#            if scenario_file == "Utviklingsscenario 1":
-#                selected_scenario_file = "input/scenarier.xlsx"
-#            else:
-#                selected_scenario_file = "input/scenarier_2.xlsx"
-#            energy_analysis = EnergyAnalysis(
-#                building_table = "building_table_østmarka.xlsx",
-#                energy_area_id = "energiomraadeid",
-#                building_area_id = "bygningsomraadeid",
-#                scenario_file_name = selected_scenario_file,
-#                temperature_array_file_path = "input/utetemperatur.xlsx")
-#            energy_analysis.main()
-            
-#            with st.expander("Simulering"):
-                #self.thermal_reduction = st.slider("Justere termisk energibehov (prosentvis reduksjon)", min_value = 0, value = 0, max_value = 100)
-                #self.electric_reduction = st.slider("Justere elektrisk energibehov (prosentvis reduksjon)", min_value = 0, value = 0, max_value = 100)
-                #selected_scenario_file = st.selectbox("Simulering", options = ["Utviklingsscenario 1", "Utviklingsscenario 2"])
-#                selected_scenario_file = "Utviklingsscenario 1"
-#                if st.button("Kjør energianalyse"):
-                    #with st.spinner("Beregner..."):
- #                   __run_energyanalysis(scenario_file = selected_scenario_file)
-            
-    def import_dataframes(self):
-        def __read_csv(folder_path = "output"):
-            csv_file_list = []
-            scenario_name_list = []
-            filename_list = []
-            for filename in os.listdir(folder_path):
-                if filename.endswith("unfiltered.csv"):
-                    filename_list.append(filename)
-                    scenario_name_list.append(filename.split(sep = "_")[0])
-                    csv_file_list.append(filename)
-            return csv_file_list, scenario_name_list
         
-        #--
-        self.temperature_array = import_temperature_array(filename = "input/utetemperatur.xlsx").to_numpy().ravel()
-        #--
-        csv_list, scenario_name_list = __read_csv(folder_path = "output")
-        df_list = []
-        df_hourly_list = []
-        for i in range(0, len(csv_list)):
-            filename = str(csv_list[i])
-            filename_hourly_data = f"output/{scenario_name_list[i]}_timedata.csv"
+    def import_dataframes(self):
+        folder_path = "output"
+        self.temperature_array = import_temperature_array(filename = "input/utetemperatur.xlsx")
+        csv_list, scenario_name_list = read_csv(folder_path = folder_path)
+        df_list, df_hourly_list = [], []
+        for index, filename in enumerate(csv_list):
+            filename_hourly_data = f"{folder_path}/{scenario_name_list[index]}_timedata.csv"
             df_hourly_data = import_df(filename = rf"{filename_hourly_data}")
-            df_hourly_data['scenario_navn'] = f'{scenario_name_list[i]}'
+            df_hourly_data['scenario_navn'] = f'{scenario_name_list[index]}'
             df_hourly_list.append(df_hourly_data)
-            df = import_df(filename = rf"output/{filename}")
-            df['scenario_navn'] = f'{scenario_name_list[i]}'
+            df = import_df(filename = rf"{folder_path}/{filename}")
+            df['scenario_navn'] = f'{scenario_name_list[index]}'
             df_list.append(df)
         self.df = pd.concat(df_list, ignore_index=True)
         self.df_hourly_data = pd.concat(df_hourly_list, ignore_index=True)
         self.scenario_name_list = scenario_name_list
 
-    def get_bounding_box(self, polygon):
-        # Extracting coordinates of the polygon vertices
-        vertices = polygon['geometry']['coordinates'][0]
-
-        # Calculate bounding box coordinates
-        lats = [point[1] for point in vertices]
-        longs = [point[0] for point in vertices]
-
-        min_lat, max_lat = min(lats), max(lats)
-        min_long, max_long = min(longs), max(longs)
-
-        return {
-            'min_lat': min_lat,
-            'max_lat': max_lat,
-            'min_long': min_long,
-            'max_long': max_long
-        }
-    
-    def __map_styling_function(self, row):
-        popup_text = ""
-        tooltip_text = ""
-        if row["grunnvarme"]:
-            icon_color = "green"
-            tooltip_text = "Grunnvarme"
-        elif row["solceller"]:
-            icon_color = "orange"
-            tooltip_text = "Solceller"
-        elif row["fjernvarme"]:
-            icon_color = "white"
-            tooltip_text = "Fjernvarme"
-        else:
-            icon_color = "black"
-        icon = folium.Icon(color = 'black', icon_color = icon_color)
-        return popup_text, tooltip_text, icon
-    
-    # østmarka 63.4525759196283, 10.447553721163194
-    # stjørdal 63.4728849, 10.8886829
-    # kringsjå 59.9640811 10.7295653
     def map(self, df, scenario_name):
-        df = df.loc[(df['scenario_navn'] == scenario_name) & (df['bygningsomraadeid'] == self.selected_buildings_option)]
-        map = folium.Map(
-            location = [63.4525759196283, 10.447553721163194], 
-            zoom_start = 15, 
-            scrollWheelZoom = True, 
-            tiles = 'CartoDB positron', 
-            max_zoom = 22, 
-            control_scale = True,)
-        Fullscreen().add_to(map)
-        draw_rectangle = folium.plugins.Draw(
-            position='topright',
-            draw_options={
-                'polyline': False,
-                #'rectangle': True,
-                'circle': False,
-                'marker': False,
-                'circlemarker': False,
-                'polygon' : False
-                }
-            )
-        map.add_child(draw_rectangle)
-        #--
-        url = "https://geo.ngu.no/mapserver/LosmasserWMS2?request=GetCapabilities&service=WMS"
-        layer = "Losmasse_flate"
-        layer_name = "Løsmasser"
-        folium.WmsTileLayer(
-             url = url,
-             layers = layer,
-             transparent = True, 
-             control = True,
-             fmt="image/png",
-             name = layer_name,
-             overlay = True,
-             show = True,
-             opacity = 0.25
-             ).add_to(map)
-        #--
-        url = "https://geo.ngu.no/mapserver/GranadaWMS5?request=GetCapabilities&service=WMS"
-        layer = "Energibronn"
-        layer_name = "Energibrønner"
-        folium.WmsTileLayer(
-             url = url,
-             layers = layer,
-             transparent = True, 
-             control = True,
-             fmt="image/png",
-             name = layer_name,
-             overlay = True,
-             show = True,
-             opacity = 0.5
-             ).add_to(map)
-        #--
-        url = "https://geo.ngu.no/geoserver/nadag/ows?request=GetCapabilities&service=WMS"
-        layer = "GBU_metode"
-        layer_name = "NADAG"
-        folium.WmsTileLayer(
-             url = url,
-             layers = layer,
-             transparent = True, 
-             control = True,
-             fmt="image/png",
-             name = layer_name,
-             overlay = True,
-             show = True,
-             opacity = 0.5
-             ).add_to(map)
-        folium.LayerControl(position = "bottomleft").add_to(map)
-#    bounding_box = self.get_bounding_box(drawn_polygon.data)
-        marker_cluster = MarkerCluster(
-            name = 'Cluster',
-            control = False,  
-            overlay = True,  
-            options = {
-                'disableClusteringAtZoom': 13
-            }).add_to(map)
-        for index, row in df.iterrows():
-            thermal_demand = int(np.sum(row['_termisk_energibehov_sum']))
-            electric_demand = int(np.sum(row['_elektrisk_energibehov_sum']))
-            total_demand = thermal_demand + electric_demand
-            if total_demand <= 100000:
-                icon_color = '#48a23f'
-            elif total_demand > 100000 and total_demand < 500000:
-                icon_color = '#b7dc8f'
-            elif total_demand > 500000 and total_demand < 1000000:
-                icon_color = '#1d3c34'
-            else:
-                icon_color = 'black'
-            popup_text = f"Termisk: {int(np.sum(row['_termisk_energibehov_sum'])):,} kWh/år<br>Elspesifikt: {int(np.sum(row['_elektrisk_energibehov_sum'])):,} kWh/år<br>".replace(",", "")
-            tooltip_text = f"Adresse: {row['har_adresse']}"
-            popup_text, tooltip_text, icon = self.__map_styling_function(row) 
-            folium.Marker(
-                [row['y'], row['x']], 
-                popup = popup_text, 
-                tooltip = tooltip_text, 
-                icon = icon).add_to(marker_cluster)
-        self.st_map = st_folium(
-            map,
-            use_container_width=True,
-            height=400,
-            returned_objects=["last_active_drawing"]
-            )
+        def create_map():
+            center_x = df['x'].mean()
+            center_y = df['y'].mean()
+            map = folium.Map(
+                location = [center_y, center_x], 
+                zoom_start = 15, 
+                scrollWheelZoom = True, 
+                tiles = 'CartoDB positron', 
+                max_zoom = 22, 
+                control_scale = True
+                )
+            return map
+        
+        def add_drawing_to_map():
+            drawing = folium.plugins.Draw(
+                position='topright',
+                draw_options = {
+                    'polyline': False,
+                    'rectangle': False,
+                    'circle': False,
+                    'marker': False,
+                    'circlemarker': False,
+                    'polygon' : True
+                    }
+                )
+            map.add_child(drawing)
 
-        #st.info("Zoom inn og ut på kartet med scrollehjulet. Diagrammene på høyre side følger kartutsnittet.", icon = "ℹ️")
-    
-    def dataframe_to_geodataframe(self, df):
-        geometry = [Point(lon, lat) for lon, lat in zip(df['x'], df['y'])]
-        gdf = gpd.GeoDataFrame(df, geometry=geometry, crs = "25832")
-        gdf = gdf.loc[gdf['bygningsomraadeid'] == self.selected_buildings_option]
-        self.gdf = gdf
-    
-    def filter_geodataframe(self):
-        original_crs = pyproj.CRS("EPSG:4326")
-        target_crs = pyproj.CRS("EPSG:4326")
-        #bounding_box = self.st_map["bounds"]
-        #transformer = pyproj.Transformer.from_crs(original_crs, target_crs, always_xy=True)
-        #min_lon, min_lat = transformer.transform(bounding_box["_southWest"]["lng"], bounding_box["_southWest"]["lat"])
-        #max_lon, max_lat = transformer.transform(bounding_box["_northEast"]["lng"], bounding_box["_northEast"]["lat"])
-        #--
-        if self.st_map["last_active_drawing"] == None:
-            st.info("Tegn polygon...")
-            self.progress_bar.progress(100)
-            st.stop()
-        else:
-            bounding_box = self.st_map["last_active_drawing"]["geometry"]["coordinates"][0]
-            sw, nw = bounding_box[0], bounding_box[2]
-            sw_long, sw_lat = sw[0], sw[1]
-            nw_long, nw_lat = nw[0], nw[1]
-            transformer = pyproj.Transformer.from_crs(original_crs, target_crs, always_xy=True)
-            min_lon, min_lat = transformer.transform(sw_long, sw_lat)
-            max_lon, max_lat = transformer.transform(nw_long, nw_lat)
-            filtered_gdf = self.gdf.cx[min_lon:max_lon, min_lat:max_lat]
+        def add_wms_layer_to_map(url, layer, layer_name, opacity = 0.5):
+            folium.WmsTileLayer(
+                url = url,
+                layers = layer,
+                transparent = True, 
+                control = True,
+                fmt="image/png",
+                name = layer_name,
+                overlay = True,
+                show = True,
+                opacity = opacity
+                ).add_to(map)
             
-            self.filtered_gdf = filtered_gdf
-            self.filtered_df = pd.DataFrame(filtered_gdf.drop(columns='geometry'))
+        def add_marker_cluster_to_map():
+            marker_cluster = MarkerCluster(
+                name = 'Cluster',
+                control = False,  
+                overlay = True,  
+                options = {
+                    'disableClusteringAtZoom': 13
+                    }
+                ).add_to(map)
+            return marker_cluster
+        
+        def styling_function(row):
+            popup_text = ""
+            tooltip_text = ""
+            if row["grunnvarme"]:
+                icon_color = "green"
+                tooltip_text = "Grunnvarme"
+            elif row["solceller"]:
+                icon_color = "orange"
+                tooltip_text = "Solceller"
+            elif row["fjernvarme"]:
+                icon_color = "white"
+                tooltip_text = "Fjernvarme"
+            else:
+                icon_color = "black"
+            icon = folium.Icon(color = 'black', icon_color = icon_color)
+            return popup_text, tooltip_text, icon
+        
+        def add_building_to_marker_cluster(marker_cluster):
+            for index, row in df.iterrows():
+                popup_text, tooltip_text, icon = styling_function(row) 
+                folium.Marker(
+                    [row['y'], row['x']], 
+                    popup = popup_text, 
+                    tooltip = tooltip_text, 
+                    icon = icon
+                    ).add_to(marker_cluster)
+            
+        def add_controls_to_map():
+            Fullscreen().add_to(map)
+            folium.LayerControl(position = "bottomleft").add_to(map)
+
+        def display_map():
+            st_map = st_folium(
+                map,
+                use_container_width = True,
+                height = 400,
+                returned_objects = ["last_active_drawing"]
+                )
+            return st_map
+        
+        def filter_gdf(st_map):
+            if st_map["last_active_drawing"] == None:
+                pass
+            else:
+                polygon = Polygon(st_map["last_active_drawing"]['geometry']['coordinates'][0])
+                polygon_gdf = gpd.GeoDataFrame(index = [0], geometry = [polygon])
+                self.filtered_gdf = gpd.sjoin(self.gdf, polygon_gdf, op = 'within')
+                self.filtered_df = pd.DataFrame(self.filtered_gdf.drop(columns='geometry'))
+
+        df = df.loc[(df['scenario_navn'] == scenario_name) & (df['bygningsomraadeid'] == self.selected_buildings_option)]
+        map = create_map()
+        add_drawing_to_map()
+        add_wms_layer_to_map(
+            url = "https://geo.ngu.no/mapserver/LosmasserWMS2?request=GetCapabilities&service=WMS",
+            layer = "Losmasse_flate",
+            layer_name = "Løsmasser",
+            opacity = 0.5
+            )
+        add_wms_layer_to_map(
+            url = "https://geo.ngu.no/mapserver/GranadaWMS5?request=GetCapabilities&service=WMS",
+            layer = "Energibronn",
+            layer_name = "GRANADA",
+            opacity = 0.5
+            )
+        add_controls_to_map()
+        marker_cluster = add_marker_cluster_to_map()
+        add_building_to_marker_cluster(marker_cluster = marker_cluster)
+        self.st_map = display_map()
+        filter_gdf(self.st_map)
+  
+    def df_to_gdf(self, df):
+        selected_buildings_option = self.selected_buildings_option
+        self.gdf = convert_df_to_gdf(df, selected_buildings_option)
         
     def get_unique_series_ids(self):
         self.unique_series_ids = self.df_hourly_data["ID"].unique().tolist()
@@ -407,7 +316,7 @@ class Dashboard:
         stand_out_color = "#48a23f"
         base_color = "#1d3c34"
         #--
-        tab1, tab2, tab3 = st.tabs(["Levert energi", "Behov", "Bygningsmassen"])
+        tab1, tab2, tab3 = st.tabs(["Levert energi", "Energi- og effektbehov", "Bygningsmassen"])
         with tab1:
             #with st.expander("Dagens energi- og effektbehov"):
             with st.container():
@@ -762,22 +671,20 @@ class Dashboard:
         return scenario_name
                            
     def app(self):
-        self.progress_bar = st.progress(0, text = "Laster inn...")
+        self.progress_bar = st.progress(5, text = "Laster inn...")
         self.adjust_input_parameters_before()
-        #st.info("TODO: Symbolisering på kart, muligheter for ulike valg? [som prosent 0 - 100% av maksimal verdi] 1) Høyest effekt 2) Høyest energibruk 3) Høyest oppvarming 4) Høyest elspesifikt. Også mulighet til å filterer på ulike scenarier?")
         self.import_dataframes()
         self.progress_bar.progress(33)
         self.adjust_input_parameters_middle()
+        self.df_to_gdf(df = self.df)
         c1, c2 = st.columns([1, 1])
         with c1:
-            self.dataframe_to_geodataframe(df = self.df)
             self.map(df = self.df, scenario_name = self.map_scenario_name)
             self.progress_bar.progress(66)
         with c2:
-            #if self.st_map["zoom"] > 24:
-            #    st.warning("Du må zoome lenger ut")
-            #else:
-            self.filter_geodataframe() # returns a pandas dataframe -> self.filtered_df
+            if self.st_map["last_active_drawing"] == None:
+                st.info('Tegn et polygon for å gjøre et utvalg av bygg.', icon="ℹ️")
+                st.stop()
             self.get_unique_series_ids()
         with c2:
             self.display_map_results(df = self.filtered_df, key = "map_results", default_option = 0)
